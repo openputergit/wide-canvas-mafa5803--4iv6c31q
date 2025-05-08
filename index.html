@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Poll Battle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #f0f0f0;
+        }
+        .neubrutalism {
+            border: 3px solid black;
+            box-shadow: 5px 5px 0px black;
+            transition: all 0.2s ease;
+        }
+        .neubrutalism:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 7px 7px 0px black;
+        }
+        .btn-disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <!-- Landing Page -->
+    <div id="landingPage" class="max-w-md mx-auto">
+        <div class="bg-yellow-300 p-8 rounded-lg neubrutalism">
+            <h1 class="text-4xl font-bold mb-8 text-center">Welcome to Live Poll Battle!</h1>
+            <input type="text" id="nameInput" placeholder="Enter your Name" class="w-full p-4 mb-4 neubrutalism bg-white">
+            <button onclick="handleCreateRoom()" class="w-full mb-4 p-4 bg-pink-400 neubrutalism font-bold">Create Poll Room</button>
+            <button onclick="toggleJoinRoom()" class="w-full p-4 bg-blue-400 neubrutalism font-bold">Join Existing Room</button>
+            <div id="joinRoomSection" class="hidden mt-4">
+                <input type="text" id="roomCodeInput" placeholder="Enter Room Code" class="w-full p-4 mb-4 neubrutalism bg-white">
+                <button onclick="handleJoinRoom()" class="w-full p-4 bg-green-400 neubrutalism font-bold">Join Room</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Poll Room -->
+    <div id="pollRoom" class="hidden max-w-md mx-auto">
+        <div class="bg-yellow-300 p-8 rounded-lg neubrutalism">
+            <div id="roomInfo" class="mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-2xl font-bold">Room Code: <span id="roomCodeDisplay"></span></h2>
+                    <button onclick="copyRoomCode()" class="p-2 bg-white neubrutalism">
+                        <i class="bi bi-clipboard"></i>
+                    </button>
+                </div>
+                <div id="timerDisplay" class="text-xl font-bold text-center mb-4"></div>
+            </div>
+            
+            <h3 class="text-2xl font-bold mb-4 text-center">Cats vs Dogs?</h3>
+            <div id="votingSection" class="space-y-4">
+                <button onclick="castVote('cats')" id="catsBtn" class="w-full p-4 bg-purple-400 neubrutalism font-bold">
+                    Vote Cats
+                </button>
+                <button onclick="castVote('dogs')" id="dogsBtn" class="w-full p-4 bg-orange-400 neubrutalism font-bold">
+                    Vote Dogs
+                </button>
+            </div>
+
+            <div class="mt-6">
+                <div class="mb-2">
+                    <div class="flex justify-between mb-1">
+                        <span>Cats: <span id="catsCount">0</span></span>
+                        <span id="catsPercentage">0%</span>
+                    </div>
+                    <div class="w-full bg-white rounded neubrutalism h-4">
+                        <div id="catsBar" class="progress-bar bg-purple-400 h-full rounded" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span>Dogs: <span id="dogsCount">0</span></span>
+                        <span id="dogsPercentage">0%</span>
+                    </div>
+                    <div class="w-full bg-white rounded neubrutalism h-4">
+                        <div id="dogsBar" class="progress-bar bg-orange-400 h-full rounded" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <p id="voteMessage" class="mt-4 text-center font-bold">You haven't voted yet.</p>
+            
+            <div id="connectedUsers" class="mt-6">
+                <h4 class="font-bold mb-2">Connected Users:</h4>
+                <ul id="usersList" class="bg-white p-4 rounded neubrutalism"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simulated WebSocket connection
+        let socket = null;
+        let roomCode = null;
+        let timer = 60;
+        let timerInterval = null;
+        let votes = { cats: 0, dogs: 0 };
+        let connectedUsers = new Set();
+
+        function initializeWebSocket() {
+            // Simulate WebSocket connection
+            socket = {
+                send: (data) => {
+                    console.log('Sent:', data);
+                    handleSocketMessage(JSON.parse(data));
+                }
+            };
+        }
+
+        function handleSocketMessage(data) {
+            if (data.type === 'vote') {
+                votes[data.choice]++;
+                updateVoteCounts();
+            }
+        }
+
+        function toggleJoinRoom() {
+            const joinSection = document.getElementById('joinRoomSection');
+            joinSection.classList.toggle('hidden');
+        }
+
+        function generateRoomCode() {
+            return Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+        function handleCreateRoom() {
+            const name = document.getElementById('nameInput').value.trim();
+            if (!name) {
+                alert('Please enter your name');
+                return;
+            }
+            
+            localStorage.setItem('userName', name);
+            roomCode = generateRoomCode();
+            initializeRoom();
+        }
+
+        function handleJoinRoom() {
+            const name = document.getElementById('nameInput').value.trim();
+            const code = document.getElementById('roomCodeInput').value.trim();
+            
+            if (!name || !code) {
+                alert('Please enter both name and room code');
+                return;
+            }
+
+            localStorage.setItem('userName', name);
+            roomCode = code;
+            initializeRoom();
+        }
+
+        function initializeRoom() {
+            document.getElementById('landingPage').classList.add('hidden');
+            document.getElementById('pollRoom').classList.remove('hidden');
+            document.getElementById('roomCodeDisplay').textContent = roomCode;
+            
+            initializeWebSocket();
+            startTimer();
+            addUser(localStorage.getItem('userName'));
+        }
+
+        function startTimer() {
+            updateTimer();
+            timerInterval = setInterval(() => {
+                timer--;
+                updateTimer();
+                
+                if (timer <= 0) {
+                    clearInterval(timerInterval);
+                    endVoting();
+                }
+            }, 1000);
+        }
+
+        function updateTimer() {
+            const minutes = Math.floor(timer / 60);
+            const seconds = timer % 60;
+            document.getElementById('timerDisplay').textContent = 
+                `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function castVote(choice) {
+            if (timer <= 0) return;
+            
+            localStorage.setItem('vote', choice);
+            document.getElementById('voteMessage').textContent = `You voted for ${choice}!`;
+            document.getElementById('catsBtn').classList.add('btn-disabled');
+            document.getElementById('dogsBtn').classList.add('btn-disabled');
+            
+            socket.send(JSON.stringify({ type: 'vote', choice }));
+        }
+
+        function updateVoteCounts() {
+            const total = votes.cats + votes.dogs;
+            const catsPercentage = total ? Math.round((votes.cats / total) * 100) : 0;
+            const dogsPercentage = total ? Math.round((votes.dogs / total) * 100) : 0;
+
+            document.getElementById('catsCount').textContent = votes.cats;
+            document.getElementById('dogsCount').textContent = votes.dogs;
+            document.getElementById('catsPercentage').textContent = `${catsPercentage}%`;
+            document.getElementById('dogsPercentage').textContent = `${dogsPercentage}%`;
+            document.getElementById('catsBar').style.width = `${catsPercentage}%`;
+            document.getElementById('dogsBar').style.width = `${dogsPercentage}%`;
+        }
+
+        function endVoting() {
+            document.getElementById('votingSection').classList.add('btn-disabled');
+            document.getElementById('voteMessage').textContent = 'Voting closed. Final Results!';
+            
+            const winner = votes.cats > votes.dogs ? 'Cats' : 
+                          votes.dogs > votes.cats ? 'Dogs' : 'It\'s a tie!';
+            document.getElementById('timerDisplay').textContent = `Winner: ${winner}`;
+        }
+
+        function copyRoomCode() {
+            navigator.clipboard.writeText(roomCode)
+                .then(() => alert('Room code copied!'))
+                .catch(err => console.error('Failed to copy:', err));
+        }
+
+        function addUser(name) {
+            connectedUsers.add(name);
+            updateUsersList();
+        }
+
+        function updateUsersList() {
+            const usersList = document.getElementById('usersList');
+            usersList.innerHTML = Array.from(connectedUsers)
+                .map(user => `<li class="mb-2">${user}</li>`)
+                .join('');
+        }
+
+        // Handle page reload
+        window.onload = () => {
+            const savedName = localStorage.getItem('userName');
+            const savedVote = localStorage.getItem('vote');
+            
+            if (savedName) {
+                document.getElementById('nameInput').value = savedName;
+            }
+            
+            if (savedVote) {
+                document.getElementById('voteMessage').textContent = `You voted for ${savedVote}!`;
+            }
+        };
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
